@@ -41,7 +41,11 @@ long int milliseconds_since_epoch_now() {
   return ms;
 }
 
-void initialize_matrix_values(float** matrix, int n, int m) {
+void initialize_matrix_values(float** matrix, float* mat1d, int n, int m) {
+  for (int i = 0; i < n; i++) {
+    matrix[i] = &(mat1d[i*m]); // map row-beginnings in 1d to mat
+  }
+
   long int seed = options.seed_milliseconds ? milliseconds_since_epoch_now() : 123456; // if -r flag
   srand48(seed);
 

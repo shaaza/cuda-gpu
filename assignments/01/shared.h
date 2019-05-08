@@ -21,18 +21,15 @@ struct Stats {
 };
 
 // CPU versions
-void perform_cpu_operations(struct Stats* host_stats);
+void perform_cpu_operations(float** matrix, struct Stats* host_stats);
 
 // GPU versions
-void perform_gpu_operations(struct Stats* device_stats);
+void perform_gpu_operations(float* mat1d, struct Stats* device_stats);
 
 // Util fns shared across CPU & GPU
 void print_matrix(float** mat, int n, int m);
 void print_vector(float* vector, int n, char* name);
 void print_elapsed_time(char* fn_name, clock_t start, clock_t end);
-void initialize_matrix_values(float** matrix, int n, int m);
+void initialize_matrix_values(float** matrix, float* mat1d, int n, int m);
 void start_timer(struct Timer* timing);
 void end_timer(struct Timer* timing);
-
-// Temporarily
-float reduce_vector(float* vec, int n, struct Timer* timing);

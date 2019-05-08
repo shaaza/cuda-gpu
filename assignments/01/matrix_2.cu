@@ -7,6 +7,7 @@
 // Add GPU impls for add_column, reduce_vector
 
 void parse_options_with_defaults(int argc, char** argv, struct Options* options);
+void alloc_matrix_host(float** mat, float* mat1d, int n, int m);
 void print_timing_report(struct Stats host_stats, struct Stats device_stats);
 
 struct Options options; // Global config var
@@ -14,13 +15,24 @@ struct Options options; // Global config var
 int main(int argc, char* argv[]) {
   parse_options_with_defaults(argc, argv, &options);
 
+  int n = options.rows;
+  int m = options.cols;
+
+  // Host: alloc & initialize
+  float* mat1d = (float*) malloc(n*m*sizeof(float));  // matrix as linear n x m array in host memory
+  float** mat = (float**) malloc(n*sizeof(float*));   // pointers to host memory
+  initialize_matrix_values(mat, mat1d, n, m);         // Sets mat values, and consequently mat1d values
+
   struct Stats host_stats;
   struct Stats device_stats;
-  perform_cpu_operations(&host_stats);
-  perform_gpu_operations(&device_stats);
+  perform_cpu_operations(mat, &host_stats);
+  perform_gpu_operations(mat1d, &device_stats);
 
+  if (n < 5 && m < 5) print_matrix(mat, n, m);
   print_timing_report(host_stats, device_stats);
 
+  free(mat);
+  free(mat1d);
   return 0;
 }
 
@@ -74,5 +86,8 @@ void print_timing_report(struct Stats cpu, struct Stats gpu) {
 
     print_elapsed_time((char*) "add_rows_gpu", gpu.add_rows.start, gpu.add_rows.end);
     print_elapsed_time((char*) "add_columns_gpu", gpu.add_columns.start, gpu.add_columns.end);
+    print_elapsed_time((char*) "reduce_vector rows GPU", gpu.reduce_vector_rows.start, gpu.reduce_vector_rows.end);
+    print_elapsed_time((char*) "reduce_vector cols GPU", gpu.reduce_vector_cols.start, gpu.reduce_vector_cols.end);
+
   }
 }
