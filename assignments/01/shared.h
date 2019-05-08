@@ -34,5 +34,5 @@ void initialize_matrix_values(float** matrix, int n, int m);
 void start_timer(struct Timer* timing);
 void end_timer(struct Timer* timing);
 
-// TEmporarily
+// Temporarily
 float reduce_vector(float* vec, int n, struct Timer* timing);

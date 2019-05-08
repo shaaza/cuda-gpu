@@ -4,15 +4,12 @@
 #include <getopt.h>
 #include "shared.h"
 
-// Pull timing out and print reports separately
-
 // Add GPU impls for add_column, reduce_vector
 
 void parse_options_with_defaults(int argc, char** argv, struct Options* options);
+void print_timing_report(struct Stats host_stats, struct Stats device_stats);
 
 struct Options options; // Global config var
-
-// MAIN
 
 int main(int argc, char* argv[]) {
   parse_options_with_defaults(argc, argv, &options);
@@ -22,14 +19,7 @@ int main(int argc, char* argv[]) {
   perform_cpu_operations(&host_stats);
   perform_gpu_operations(&device_stats);
 
-  if (options.timing) {
-    print_elapsed_time((char*) "add_rows CPU", host_stats.add_rows.start, host_stats.add_rows.end);
-    print_elapsed_time((char*) "add_columns CPU", host_stats.add_columns.start, host_stats.add_columns.end);
-    print_elapsed_time((char*) "reduce_vector rows CPU", host_stats.reduce_vector_rows.start, host_stats.reduce_vector_rows.end);
-    print_elapsed_time((char*) "reduce_vector cols CPU", host_stats.reduce_vector_cols.start, host_stats.reduce_vector_cols.end);
-
-    print_elapsed_time((char*) "add_rows_gpu", device_stats.add_rows.start, device_stats.add_rows.end);
-  }
+  print_timing_report(host_stats, device_stats);
 
   return 0;
 }
@@ -72,5 +62,17 @@ void parse_options_with_defaults(int argc, char** argv, struct Options* options)
       printf("Incorrect options provided.");
       exit(EXIT_FAILURE);
     }
+  }
+}
+
+void print_timing_report(struct Stats cpu, struct Stats gpu) {
+  if (options.timing) {
+    print_elapsed_time((char*) "add_rows CPU", cpu.add_rows.start, cpu.add_rows.end);
+    print_elapsed_time((char*) "add_columns CPU", cpu.add_columns.start, cpu.add_columns.end);
+    print_elapsed_time((char*) "reduce_vector rows CPU", cpu.reduce_vector_rows.start, cpu.reduce_vector_rows.end);
+    print_elapsed_time((char*) "reduce_vector cols CPU", cpu.reduce_vector_cols.start, cpu.reduce_vector_cols.end);
+
+    print_elapsed_time((char*) "add_rows_gpu", gpu.add_rows.start, gpu.add_rows.end);
+    print_elapsed_time((char*) "add_columns_gpu", gpu.add_columns.start, gpu.add_columns.end);
   }
 }
