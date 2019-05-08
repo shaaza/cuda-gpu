@@ -52,3 +52,12 @@ void initialize_matrix_values(float** matrix, int n, int m) {
     }
   }
 }
+
+// Record timing
+void start_timer(struct Timer* timer) {
+  timer->start = clock();
+}
+
+void end_timer(struct Timer* timer) {
+  timer->end = clock();
+}

@@ -6,11 +6,12 @@
 void cuda_last_error_check (const char *message);
 
 __global__ void add_rows_gpu_kernel(float* mat, float* out, int n, int m);
-void add_rows_gpu(float* rowsum, float* mat1d, int n, int m, dim3* dimBlock, dim3* dimGrid);
+void add_rows_gpu(float* rowsum, float* mat1d, int n, int m,
+		  dim3* dimBlock, dim3* dimGrid, struct Timer* timer);
 
 extern struct Options options; // Global config var
 
-void perform_gpu_operations() {
+void perform_gpu_operations(struct Stats* device_stats) {
   int n = options.rows;
   int m = options.cols;
 
@@ -30,12 +31,12 @@ void perform_gpu_operations() {
 
   // Rowsum
   float* rowsum = (float*) malloc(n*sizeof(float));
-  add_rows_gpu(rowsum, mat1d, n, m, &dimBlock, &dimGrid);
+  add_rows_gpu(rowsum, mat1d, n, m, &dimBlock, &dimGrid, &(device_stats->add_rows));
 
   // Print results
   if (n < 5 && m < 5) print_matrix(mat, n, m);
   if (n < 5) print_vector(rowsum, n, (char*) "rowsum_GPU");
-  printf("Rowsum sum GPU: %f \n", reduce_vector(rowsum, n));
+  printf("Rowsum sum GPU: %f \n", reduce_vector(rowsum, n, &(device_stats->reduce_vector_rows)));
 
   // Free memory
   free(mat1d);
@@ -43,7 +44,8 @@ void perform_gpu_operations() {
   free(rowsum);
 }
 
-void add_rows_gpu(float* rowsum, float* mat1d, int n, int m, dim3* dimBlock, dim3* dimGrid) {
+void add_rows_gpu(float* rowsum, float* mat1d, int n, int m,
+		  dim3* dimBlock, dim3* dimGrid, struct Timer* timer) {
   // Device: alloc
   float* mat1d_GPU;
   float* rowsum_GPU;
@@ -55,11 +57,11 @@ void add_rows_gpu(float* rowsum, float* mat1d, int n, int m, dim3* dimBlock, dim
   cudaMemcpy(rowsum_GPU, rowsum, n*sizeof(float), cudaMemcpyHostToDevice);
 
   // Device: execution + timing
-  clock_t start = clock();
+  start_timer(timer);
   add_rows_gpu_kernel<<<*dimGrid, *dimBlock>>>(mat1d_GPU, rowsum_GPU, n, m);
-  clock_t end = clock();
+  end_timer(timer);
+
   cuda_last_error_check("add_rows_gpu");
-  print_elapsed_time((char*) "add_rows_gpu", start, end);
 
   // Device->Host copy
   cudaMemcpy(mat1d, mat1d_GPU, n*m*sizeof(float), cudaMemcpyDeviceToHost);

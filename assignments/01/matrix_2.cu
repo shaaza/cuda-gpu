@@ -4,19 +4,9 @@
 #include <getopt.h>
 #include "shared.h"
 
-// Pull timing out
+// Pull timing out and print reports separately
 
-// Timing stats
-struct Timing {
-  clock_t start;
-  clock_t end;
-};
-
-struct Stats {
-  struct Timing add_rows;
-  struct Timing add_columns;
-  struct Timing reduce_vector;
-};
+// Add GPU impls for add_column, reduce_vector
 
 void parse_options_with_defaults(int argc, char** argv, struct Options* options);
 
@@ -26,8 +16,20 @@ struct Options options; // Global config var
 
 int main(int argc, char* argv[]) {
   parse_options_with_defaults(argc, argv, &options);
-  perform_cpu_operations();
-  perform_gpu_operations();
+
+  struct Stats host_stats;
+  struct Stats device_stats;
+  perform_cpu_operations(&host_stats);
+  perform_gpu_operations(&device_stats);
+
+  if (options.timing) {
+    print_elapsed_time((char*) "add_rows CPU", host_stats.add_rows.start, host_stats.add_rows.end);
+    print_elapsed_time((char*) "add_columns CPU", host_stats.add_columns.start, host_stats.add_columns.end);
+    print_elapsed_time((char*) "reduce_vector rows CPU", host_stats.reduce_vector_rows.start, host_stats.reduce_vector_rows.end);
+    print_elapsed_time((char*) "reduce_vector cols CPU", host_stats.reduce_vector_cols.start, host_stats.reduce_vector_cols.end);
+
+    print_elapsed_time((char*) "add_rows_gpu", device_stats.add_rows.start, device_stats.add_rows.end);
+  }
 
   return 0;
 }
