@@ -1,0 +1,10 @@
+Allocate floating point
+
+Initialize floating point
+
+
+addRows [[Int]] -> [Int](n)
+
+addColumns [[Int]] -> [Int](m)
+
+reduce[Int] -> Int
