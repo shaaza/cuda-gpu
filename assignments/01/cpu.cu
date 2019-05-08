@@ -16,20 +16,16 @@ void perform_cpu_operations(float** matrix, struct Stats* stats) {
   int m = options.cols;
 
   // Compute row-sum, col-sum and their reduced values.
-  float* rowsum_vec = add_rows(matrix, n, m, &(stats->add_rows));
-  float* colsum_vec = add_columns(matrix, n, m, &(stats->add_columns));
-  float rowsum_reduced = reduce_vector(rowsum_vec, n, &(stats->reduce_vector_rows));
-  float colsum_reduced = reduce_vector(colsum_vec, n, &(stats->reduce_vector_cols));
+  float* rowsum = add_rows(matrix, n, m, &(stats->add_rows));
+  float* colsum = add_columns(matrix, n, m, &(stats->add_columns));
+  float rowsum_reduced = reduce_vector(rowsum, n, &(stats->reduce_vector_rows));
+  float colsum_reduced = reduce_vector(colsum, n, &(stats->reduce_vector_cols));
 
-  // Print matrix and vectors if small
-  if (n < 5) print_vector(rowsum_vec, n, (char*) "Rowsum Vector");
-  if (m < 5) print_vector(colsum_vec, n, (char*) "Colsum Vector");
-  printf("Rowsum sum: %f \n", rowsum_reduced);
-  printf("Colsum sum: %f \n", colsum_reduced);
+  print_compute_results((char*) "CPU Results:", rowsum, colsum, rowsum_reduced, colsum_reduced, n, m);
 
   // Free matrix and vectors
-  free(rowsum_vec);
-  free(colsum_vec);
+  free(rowsum);
+  free(colsum);
 }
 
 // Sum up n rows of a matrix into a vector of size n

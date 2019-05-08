@@ -35,11 +35,7 @@ void perform_gpu_operations(float* mat1d, struct Stats* stats) {
   float colsum_reduced;
   reduce_vector_gpu(colsum, &colsum_reduced, m, &(stats->reduce_vector_cols));
 
-  // Print results
-  if (n < 5) print_vector(rowsum, n, (char*) "Rowsum Vector GPU");
-  if (m < 5) print_vector(colsum, m, (char*) "colsum Vector GPU");
-  printf("Rowsum sum GPU: %f \n", rowsum_reduced);
-  printf("Colsum sum GPU: %f \n", colsum_reduced);
+  print_compute_results((char*) "GPU Results:", rowsum, colsum, rowsum_reduced, colsum_reduced, n, m);
 
   // Free memory
   free(rowsum);

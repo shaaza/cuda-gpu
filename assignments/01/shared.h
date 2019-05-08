@@ -1,13 +1,15 @@
 
-// Options struct
+// Options (command-line)
 struct Options {
   int seed_milliseconds;  // -r
   int timing;             // -t
   int rows;               // -n NUMBER
   int cols;               // -m NUMBER
+  int print_vectors;      // -p
+  int disp_time_adjacent; // -d
 };
 
-// Timer
+// Timing
 struct Timer {
   clock_t start;
   clock_t end;
@@ -28,8 +30,10 @@ void perform_gpu_operations(float* mat1d, struct Stats* device_stats);
 
 // Util fns shared across CPU & GPU
 void print_matrix(float** mat, int n, int m);
-void print_vector(float* vector, int n, char* name);
+void print_compute_results(char* title, float* rowvec, float* colvec, float rowsum, float colsum, int n, int m);
 void print_elapsed_time(char* fn_name, clock_t start, clock_t end);
+
+double elapsed_time(clock_t start, clock_t end);
 void initialize_matrix_values(float** matrix, float* mat1d, int n, int m);
 void start_timer(struct Timer* timing);
 void end_timer(struct Timer* timing);

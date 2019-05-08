@@ -26,10 +26,25 @@ void print_vector(float* vector, int n, char* name) {
   printf("\n");
 }
 
+void print_compute_results(char* title, float* rowvec, float* colvec, float rowsum, float colsum, int n, int m) {
+  printf("%s\n", title);
+  if (options.print_vectors) { // Print result vectors if command-line flag enabled
+    print_vector(rowvec, n, (char*) "Rowsum Vector");
+    print_vector(colvec, n, (char*) "Colsum Vector");
+  }
+
+  printf("Rowsum sum: %f \n", rowsum);
+  printf("Colsum sum: %f \n", colsum);
+  printf("\n");
+}
+
 // Print elapsed time given start and end
-void print_elapsed_time(char* fn_name, clock_t start, clock_t end) {
+double elapsed_time(clock_t start, clock_t end) {
   double time_spent_ms = (double)(end - start) / (CLOCKS_PER_SEC/1000);
-  printf("(timing) %s: %fms \n", fn_name, time_spent_ms);
+  return time_spent_ms;
+}
+void print_elapsed_time(char* fn_name, clock_t start, clock_t end) {
+  printf("(timing) %s: %fms \n", fn_name, elapsed_time(start, end));
 };
 
 // Initialize values of matrix randomized using
@@ -55,6 +70,9 @@ void initialize_matrix_values(float** matrix, float* mat1d, int n, int m) {
       matrix[i][j] = (float) (drand48()*2.0) - 1.0;
     }
   }
+
+  if (options.print_vectors)
+    print_matrix(matrix, n, m);
 }
 
 // Record timing
