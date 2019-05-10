@@ -35,7 +35,7 @@ void perform_gpu_operations(float* mat1d, struct Stats* stats) {
   float colsum_reduced;
   reduce_vector_gpu(colsum, &colsum_reduced, m, &(stats->reduce_vector_cols));
 
-  print_compute_results((char*) "GPU Results:", rowsum, colsum, rowsum_reduced, colsum_reduced, n, m);
+  print_compute_results((char*) "GPU Results:", rowsum, colsum_vec, rowsum_reduced, colsum_reduced, n, m);
 
   // Free memory
   free(rowsum);
@@ -44,8 +44,8 @@ void perform_gpu_operations(float* mat1d, struct Stats* stats) {
 
 void add_rows_gpu(float* rowsum, float* mat1d, int n, int m, struct Timer* timer) {
   // Compute execution GPU config
-  dim3 dimBlock(BLOCK_SIZE, 1);
-  int blocks_in_grid = (int) ceil((double) n / BLOCK_SIZE);
+  dim3 dimBlock(options.block_size, 1);
+  int blocks_in_grid = (int) ceil((double) n / options.block_size);
   dim3 dimGrid(blocks_in_grid, 1);
 
   // Device: alloc
@@ -74,8 +74,8 @@ void add_rows_gpu(float* rowsum, float* mat1d, int n, int m, struct Timer* timer
 
 void add_columns_gpu(float* colsum, float* mat1d, int n, int m, struct Timer* timer) {
   // Compute execution GPU config
-  dim3 dimBlock(1, BLOCK_SIZE);
-  int blocks_in_grid = (int) ceil((double) n / BLOCK_SIZE);
+  dim3 dimBlock(1, options.block_size);
+  int blocks_in_grid = (int) ceil((double) n / options.block_size);
   dim3 dimGrid(blocks_in_grid, 1);
 
   // Device: alloc
@@ -105,7 +105,7 @@ void add_columns_gpu(float* colsum, float* mat1d, int n, int m, struct Timer* ti
 void reduce_vector_gpu(float* vec, float* result, int n, struct Timer* timer) {
   // Compute execution GPU config
   dim3 dimBlock(1, 1);
-  int blocks_in_grid = (int) ceil((double) n / BLOCK_SIZE);
+  int blocks_in_grid = (int) ceil((double) n / options.block_size);
   dim3 dimGrid(blocks_in_grid, 1);
 
   // Device: alloc
@@ -135,7 +135,7 @@ void reduce_vector_gpu(float* vec, float* result, int n, struct Timer* timer) {
 // Kernels
 
 __global__ void add_rows_gpu_kernel(float* mat, float* out, int n, int m) {
-       int x = blockIdx.x * BLOCK_SIZE + threadIdx.x;
+       int x = blockIdx.x * options.block_size + threadIdx.x;
        int y = threadIdx.y;
        if (x < n && y == 0) { // Only 0th thread in the y dimension is used
 	 out[x] = 0;
@@ -147,7 +147,7 @@ __global__ void add_rows_gpu_kernel(float* mat, float* out, int n, int m) {
 
 __global__ void add_cols_gpu_kernel(float* mat, float* out, int n, int m) {
        int x = threadIdx.x;
-       int y = blockIdx.x * BLOCK_SIZE + threadIdx.y;
+       int y = blockIdx.x * options.block_size + threadIdx.y;
        if (y < m && x == 0) { // Only 0th thread in the x dimension is used
 	 out[y] = 0;
 	 for (int i = 0; i < n; i++) {

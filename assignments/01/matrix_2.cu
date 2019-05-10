@@ -4,7 +4,6 @@
 #include <getopt.h>
 #include "shared.h"
 
-// 1. CLI option for only CPU vs both
 // 2. Timings for different n, m, BLOCK_SIZE. Print and output to file.
 // 3. Parse n, m, BLOCK_SIZE in Python and plot JPG
 // 4. Double precision experiments
@@ -49,12 +48,12 @@ void parse_options_with_defaults(int argc, char** argv, struct Options* options)
   options->disp_time_adjacent = 0;
 
   int option_index = 0;
-  while (( option_index = getopt(argc, argv, "n:m:rtpd")) != -1) {
+  while (( option_index = getopt(argc, argv, "n:m:rtpdb:")) != -1) {
     switch (option_index) {
     case 'n':
       options->rows = atoi(optarg);
       if (options->rows == 0) {
-	printf("Invalid matrix size");
+	printf("Invalid matrix size\n");
 	exit(EXIT_FAILURE);
       }
       break;
@@ -62,7 +61,7 @@ void parse_options_with_defaults(int argc, char** argv, struct Options* options)
     case 'm':
       options->cols = atoi(optarg);
       if (options->cols == 0) {
-	printf("Invalid matrix size");
+	printf("Invalid matrix size\n");
 	exit(EXIT_FAILURE);
       }
       break;
@@ -83,9 +82,17 @@ void parse_options_with_defaults(int argc, char** argv, struct Options* options)
       options->disp_time_adjacent = 1;
       break;
 
+    case 'b':
+      options->block_size = atoi(optarg);
+      if (options->block_size <= 0 || options->block_size > 1024) {
+	printf("Invalid block size\n");
+	exit(EXIT_FAILURE);
+      }
+      break
+
 
     default:
-      printf("Incorrect options provided.");
+      printf("Incorrect options provided.\n");
       exit(EXIT_FAILURE);
     }
   }
