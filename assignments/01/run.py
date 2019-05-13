@@ -31,7 +31,8 @@ def parse_output(output: str):
     split_lines = list(map(lambda x: x.split(": "), timing_lines))
     flattened = [elem for arr in split_lines for elem in arr]
     timings_array = map(lambda x: {"cpu": float(x.split(", ")[0][:-2]),
-                                   "gpu": float(x.split(", ")[1][:-2])},
+                                   "gpu": float(x.split(", ")[1][:-2]),
+                                   "speedup": float(x.split(", ")[0][:-2])/float(x.split(", ")[1][:-2])},
                         flattened[1::2])
     return timing(list(timings_array))
 
@@ -40,26 +41,16 @@ for n in matrix_sizes:
     out = run_computation(n, n, 4)
     timing_results.append(parse_output(out));
 
-def plot_cpu_graph(timing_results):
-    plt.plot(matrix_sizes, list(map(lambda x: x["add_rows"]["cpu"], timing_results)), linestyle="--", marker='o', color='b')
-    plt.plot(matrix_sizes, list(map(lambda x: x["add_cols"]["cpu"], timing_results)), linestyle="--", marker='o', color='g')
-    plt.plot(matrix_sizes, list(map(lambda x: x["reduce_vector_rows"]["cpu"], timing_results)), linestyle="--", marker='o', color='r')
-    plt.plot(matrix_sizes, list(map(lambda x: x["reduce_vector_cols"]["cpu"], timing_results)), linestyle="--", marker='o', color='black')
+def plot_speedup_graph(timing_results):
+    plt.plot(matrix_sizes, list(map(lambda x: x["add_rows"]["speedup"], timing_results)), linestyle="--", marker='o', color='b')
+    plt.plot(matrix_sizes, list(map(lambda x: x["add_cols"]["speedup"], timing_results)), linestyle="--", marker='o', color='g')
+    plt.plot(matrix_sizes, list(map(lambda x: x["reduce_vector_rows"]["speedup"], timing_results)), linestyle="--", marker='o', color='r')
+    plt.plot(matrix_sizes, list(map(lambda x: x["reduce_vector_cols"]["speedup"], timing_results)), linestyle="--", marker='o', color='black')
     plt.xlabel("Matrix size")
-    plt.ylabel("Time (ms)")
-    plt.savefig("CPU_"+filename_block_size+".png")
+    plt.ylabel("Speedup")
+    plt.savefig("speedup_"+filename_block_size+".png")
     plt.clf()
 
-def plot_gpu_graph(timing_results):
-    plt.plot(matrix_sizes, list(map(lambda x: x["add_rows"]["gpu"], timing_results)), linestyle="--", marker='o', color='yellow')
-    plt.plot(matrix_sizes, list(map(lambda x: x["add_cols"]["gpu"], timing_results)), linestyle="--", marker='o', color='orange')
-    plt.plot(matrix_sizes, list(map(lambda x: x["reduce_vector_rows"]["gpu"], timing_results)), linestyle="--", marker='o', color='grey')
-    plt.plot(matrix_sizes, list(map(lambda x: x["reduce_vector_cols"]["gpu"], timing_results)), linestyle="--", marker='o', color='black')
-    plt.xlabel("Matrix size")
-    plt.ylabel("Time (ms)")
-    plt.savefig("GPU_"+filename_block_size+".png")
-    plt.clf()
+plot_speedup_graph(timing_results)
 
-plot_cpu_graph(timing_results)
-plot_gpu_graph(timing_results)
 print(timing_results)
