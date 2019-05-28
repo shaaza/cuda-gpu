@@ -1,11 +1,11 @@
 #include <stdio.h>
 #include "shared.h"
-#include "block_size.h"
+#include "constants.h"
 
 void cuda_last_error_check (const char *message);
 
 // Add rows kernel & related operations
-__global__ void evolve_gpu_kernel(float* mat, float* out, int n, int m);
+__global__ void evolve_gpu_kernel(float* mat, float* out, int n, int m, int iters);
 __global__ void copy_matrix(float* mat, float* out, int n, int m);
 __global__ void row_avg(float* rowavg, float* mat, int n, int m);
 void evolve_gpu(float* rowsum, float* mat1d, int n, int m, int iters, struct DeviceStats* stats);
@@ -30,22 +30,20 @@ void evolve_gpu(float* out_mat1d, float* mat1d, int n, int m, int iters, struct 
   cudaEventCreate(&stop);
 
   // Compute execution GPU config
-  int x_blocks_in_grid = (int) ceil((double) n / BLOCK_SIZE);
-  int y_blocks_in_grid = (int) ceil((double) m / BLOCK_SIZE);
+  int x_blocks_in_grid = (int) ceil((double) n / BLOCK_WIDTH);
+  int y_blocks_in_grid = (int) ceil((double) m / BLOCK_WIDTH);
 
   printf("Block size: %d*%d = %d, x_blocks per grid: %d, y_blocks per grid: %d\n",
-	 BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE*BLOCK_SIZE,
+	 BLOCK_WIDTH, BLOCK_WIDTH, BLOCK_SIZE,
 	 x_blocks_in_grid, y_blocks_in_grid);
   // Host: alloc
   float* rowavg = (float*) malloc(n*sizeof(float));
   // Device: alloc
   float* mat1d_GPU;
-  float* out_mat1d_GPU;
   float* rowavg_GPU;
 
   cudaEventRecord(start);
   cudaMalloc((void**) &mat1d_GPU, n*m*sizeof(float));
-  cudaMalloc((void**) &out_mat1d_GPU, n*m*sizeof(float));
   cudaMalloc((void**) &rowavg_GPU, n*sizeof(float));
   cudaEventRecord(stop);
   set_duration(&(stats->allocation), &start, &stop);
@@ -58,73 +56,98 @@ void evolve_gpu(float* out_mat1d, float* mat1d, int n, int m, int iters, struct 
   set_duration(&(stats->to_gpu_transfer), &start, &stop);
 
   // Device: execution + timing
-  dim3 dimBlock(BLOCK_SIZE*BLOCK_SIZE, 1);
-  dim3 dimGrid(x_blocks_in_grid, y_blocks_in_grid); // TODO: check n != m
+  dim3 dimBlock(BLOCK_SIZE, 1);
+  dim3 dimGrid(n, 1); // TODO: check n != m
 
   cudaEventRecord(start);
-  for (int i = 0; i < iters; i++) {
-    evolve_gpu_kernel<<<dimGrid, dimBlock>>>(mat1d_GPU, out_mat1d_GPU, n, m);
-    copy_matrix<<<dimGrid, dimBlock>>>(mat1d_GPU, out_mat1d_GPU, n, m);
-  }
+  evolve_gpu_kernel<<<dimGrid, dimBlock>>>(mat1d_GPU, mat1d_GPU, n, m, iters);
   cudaEventRecord(stop);
   set_duration(&(stats->gpu_compute), &start, &stop);
 
   cuda_last_error_check("evolve_gpu");
 
   // Print row average
-  cudaEventRecord(start);
+
   if (options.show_average != 0) {
-    dim3 dimBlock(BLOCK_SIZE, 1);
-    dim3 dimGrid((int) ceil((double) n / BLOCK_SIZE), 1);
-    row_avg<<<dimGrid, dimBlock>>>(rowavg_GPU, out_mat1d_GPU, n, m);
+    dim3 dimBlock(BLOCK_WIDTH, 1);
+    dim3 dimGrid((int) ceil((double) n / BLOCK_WIDTH), 1);
+
+    cudaEventRecord(start);
+    row_avg<<<dimGrid, dimBlock>>>(rowavg_GPU, mat1d_GPU, n, m);
+    cudaEventRecord(stop);
+    set_duration(&(stats->row_avg), &start, &stop);
+
+    cuda_last_error_check("row_average_gpu");
+
     cudaMemcpy(rowavg, rowavg_GPU, n*sizeof(float), cudaMemcpyDeviceToHost);
     print_row_avg(rowavg, n, 0);
   }
-  cudaEventRecord(stop);
-  set_duration(&(stats->row_avg), &start, &stop);
-  cuda_last_error_check("row_average_gpu");
 
   // Device->Host copy
   cudaEventRecord(start);
-  cudaMemcpy(out_mat1d, out_mat1d_GPU, n*m*sizeof(float), cudaMemcpyDeviceToHost);
+  cudaMemcpy(out_mat1d, mat1d_GPU, n*m*sizeof(float), cudaMemcpyDeviceToHost);
   cudaEventRecord(stop);
   set_duration(&(stats->to_cpu_transfer), &start, &stop);
 
   cudaFree(mat1d_GPU);
-  cudaFree(out_mat1d_GPU);
 }
 
 
 // Kernels
-__global__ void evolve_gpu_kernel(float* mat, float* out, int n, int m) {
-  // __shared__ float mat_local[BLOCK_SIZE+4]; // Tile width = block size
-  int x = blockIdx.x * BLOCK_SIZE + threadIdx.x;
-  int y = blockIdx.y * BLOCK_SIZE + threadIdx.y;
+__global__ void evolve_gpu_kernel(float* mat, float* out, int n, int m, int iters) {
+  int dx = threadIdx.x; // Starting column
+  int row_no = blockIdx.x; // Row number of matrix
+  int elems_per_thread = (int) ceil((float) m / (float) BLOCK_SIZE);
+  __shared__ float row[MAX_COLS]; // One row per block, elems_per_thread cells per thread
+  __shared__ float out_row[MAX_COLS]; // One row per thread, elems_per_thread cells per thread
 
-  // Load tile into shared and wait for threads
-  //__syncthreads();
+  // Load row: global -> shared & barrier sync
+  int y;
+  for (int i = 0; i < elems_per_thread; i++) {
+    y = dx + i*BLOCK_SIZE;
+    if (y < m) {
+      row[y] = mat[row_no*m + y];
+    }
+  }
+  __syncthreads();
 
   // Left-most columns 0 and 1
-  if (x >= 0 && x < n && y >= 0 && y <= 1) {
-    out[x*m + y] = mat[x*m + y];
+  if (dx >= 0 && dx <= 1) {
+    out_row[dx] = row[dx];
   }
 
-  // Other columns
-  if (x >= 0 && x < n && y > 1 && y < m) {
-    out[x*m + y] = ((1.9*mat[x*m + y-2]) +
-		    (1.5*mat[x*m + y-1]) +
-		    mat[x*m + y] +
-		    (0.5*mat[x*m + (y+1)%m]) +
-		    (0.1*mat[x*m + (y+2)%m])) / (float) 5;
+  // Evolve iterations
+  if (dx > 1) {
+    for (int i = 0; i < iters; i++) {
+      // Propagate row
+      for (int i = 0; i < elems_per_thread; i++) {
+  	y = dx + i*BLOCK_SIZE;
+  	if (y < m) {
+  	  out_row[y] = ((1.9*row[y-2]) +
+  			(1.5*row[y-1]) +
+  			row[y] +
+  			(0.5*row[(y+1)%m]) +
+  			(0.1*row[(y+2)%m])) / (float) 5;
+  	}
+      }
+      __syncthreads();
+      // Copy over row
+      for (int i = 0; i < elems_per_thread; i++) {
+  	y = dx + (i*BLOCK_SIZE);
+  	if (y < m)
+  	  row[y] = out_row[y];
+      }
+      __syncthreads();
+    }
   }
-}
 
-__global__ void copy_matrix(float* mat, float* out, int n, int m) {
-       int x = blockIdx.x * BLOCK_SIZE + threadIdx.x;
-       int y = blockIdx.y * BLOCK_SIZE + threadIdx.y;
-       if (x >= 0 && x < n && y > 1 && y < m) {
-	 mat[x*m + y] = out[x*m + y];
-       }
+  // Store row: shared -> global
+  for (int i = 0; i < elems_per_thread; i++) {
+    y = dx + i*BLOCK_SIZE;
+    if (y < m)
+      mat[row_no*m + y] = row[y];
+  }
+
 }
 
 __global__ void row_avg(float* rowavg, float* mat1d, int n, int m) {

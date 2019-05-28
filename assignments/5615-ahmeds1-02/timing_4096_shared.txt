@@ -1,0 +1,15 @@
+Iters 1000, Rows 4096, Cols 4096
+Performing CPU computations...
+Initialized matrix values...
+Performing GPU computations...
+Block size: 32*32 = 1024, x_blocks per grid: 128, y_blocks per grid: 128
+
+Timing Report:
+[CPU] Compute: 271797.140000ms 
+[CPU] Row Average: 40.863000ms 
+
+[GPU] Allocation: 0.293568ms
+[GPU] Host -> GPU Transfer: 10.551904ms
+[GPU] compute: 45104.441406ms
+[GPU] GPU -> Host Transfer: 10.483776ms
+[GPU] Row Average: 0.000000ms
