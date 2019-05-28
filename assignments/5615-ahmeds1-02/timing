@@ -1,0 +1,9 @@
+Iters 1000, Rows 15360, Cols 15360
+Performing CPU computations...
+Performing GPU computations...
+Block size: 32*32 = 1024, x_blocks per grid: 480, y_blocks per grid: 480
+(timing) compute CPU: 4422804.246000ms 
+GPU Allocation: 1.531456ms
+Host -> GPU Transfer: 148.569092ms
+compute GPU: 259559.734375ms
+GPU -> Host Transfer: 145.859100ms

@@ -5,170 +5,155 @@
 void cuda_last_error_check (const char *message);
 
 // Add rows kernel & related operations
-__global__ void add_rows_gpu_kernel(float* mat, float* out, int n, int m);
-void add_rows_gpu(float* rowsum, float* mat1d, int n, int m, struct Timer* timer);
+__global__ void evolve_gpu_kernel(float* mat, float* out, int n, int m);
+__global__ void copy_matrix(float* mat, float* out, int n, int m);
+__global__ void row_avg(float* rowavg, float* mat, int n, int m);
+void evolve_gpu(float* rowsum, float* mat1d, int n, int m, int iters, struct DeviceStats* stats);
 
-// Add columns kernel & related operations
-__global__ void add_cols_gpu_kernel(float* mat, float* out, int n, int m);
-void add_columns_gpu(float* rowsum, float* mat1d, int n, int m, struct Timer* timer);
-
-// Reduce vector kernel & related operations
-__global__ void reduce_vector_gpu_kernel(float* vec, float* result, int n);
-void reduce_vector_gpu(float* vec, float* result, int n, struct Timer* timer);
+void set_duration(Timer* timer, cudaEvent_t* start, cudaEvent_t* stop);
 
 extern struct Options options; // Global config var
 
-void perform_gpu_operations(float* mat1d, struct Stats* stats) {
+void perform_gpu_evolution(float* out_mat1d, float* mat1d, struct DeviceStats* stats) {
   int n = options.rows;
   int m = options.cols;
+  int iters = options.iterations;
 
-  float* rowsum = (float*) malloc(n*sizeof(float));
-  add_rows_gpu(rowsum, mat1d, n, m, &(stats->add_rows));
+  evolve_gpu(out_mat1d, mat1d, n, m, iters, stats);
 
-  float* colsum = (float*) malloc(n*sizeof(float));
-  add_columns_gpu(colsum, mat1d, n, m, &(stats->add_columns));
-
-  float rowsum_reduced;
-  reduce_vector_gpu(rowsum, &rowsum_reduced, n, &(stats->reduce_vector_rows));
-
-  float colsum_reduced;
-  reduce_vector_gpu(colsum, &colsum_reduced, m, &(stats->reduce_vector_cols));
-
-  print_compute_results((char*) "GPU Results:", rowsum, colsum, rowsum_reduced, colsum_reduced, n, m);
-
-  // Free memory
-  free(rowsum);
-  free(colsum);
+  //print_compute_results((char*) "GPU Results:", rowsum, n, m);
 }
 
-void add_rows_gpu(float* rowsum, float* mat1d, int n, int m, struct Timer* timer) {
-  // Compute execution GPU config
-  dim3 dimBlock(BLOCK_SIZE, 1);
-  int blocks_in_grid = (int) ceil((double) n / BLOCK_SIZE);
-  dim3 dimGrid(blocks_in_grid, 1);
+void evolve_gpu(float* out_mat1d, float* mat1d, int n, int m, int iters, struct DeviceStats* stats) {
+  cudaEvent_t start, stop;
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
 
+  // Compute execution GPU config
+  int x_blocks_in_grid = (int) ceil((double) n / BLOCK_SIZE);
+  int y_blocks_in_grid = (int) ceil((double) m / BLOCK_SIZE);
+
+  printf("Block size: %d*%d = %d, x_blocks per grid: %d, y_blocks per grid: %d\n",
+	 BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE*BLOCK_SIZE,
+	 x_blocks_in_grid, y_blocks_in_grid);
+  // Host: alloc
+  float* rowavg = (float*) malloc(n*sizeof(float));
   // Device: alloc
   float* mat1d_GPU;
-  float* rowsum_GPU;
+  float* out_mat1d_GPU;
+  float* rowavg_GPU;
+
+  cudaEventRecord(start);
   cudaMalloc((void**) &mat1d_GPU, n*m*sizeof(float));
-  cudaMalloc((void**) &rowsum_GPU, n*sizeof(float));
+  cudaMalloc((void**) &out_mat1d_GPU, n*m*sizeof(float));
+  cudaMalloc((void**) &rowavg_GPU, n*sizeof(float));
+  cudaEventRecord(stop);
+  set_duration(&(stats->allocation), &start, &stop);
 
   // Host->Device copy
+  cudaEventRecord(start);
   cudaMemcpy(mat1d_GPU, mat1d, n*m*sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(rowavg_GPU, rowavg, n*sizeof(float), cudaMemcpyHostToDevice);
+  cudaEventRecord(stop);
+  set_duration(&(stats->to_gpu_transfer), &start, &stop);
 
   // Device: execution + timing
-  start_timer(timer);
-  add_rows_gpu_kernel<<<dimGrid, dimBlock>>>(mat1d_GPU, rowsum_GPU, n, m);
-  end_timer(timer);
+  dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
+  dim3 dimGrid(x_blocks_in_grid, y_blocks_in_grid);
 
-  cuda_last_error_check("add_rows_gpu");
+  cudaEventRecord(start);
+  for (int i = 0; i < iters; i++) {
+    evolve_gpu_kernel<<<dimGrid, dimBlock>>>(mat1d_GPU, out_mat1d_GPU, n, m);
+    copy_matrix<<<dimGrid, dimBlock>>>(mat1d_GPU, out_mat1d_GPU, n, m);
+  }
+  cudaEventRecord(stop);
+  set_duration(&(stats->gpu_compute), &start, &stop);
+
+  cuda_last_error_check("evolve_gpu");
+
+  // Print row average
+  cudaEventRecord(start);
+  if (options.show_average != 0) {
+    dim3 dimBlock(BLOCK_SIZE, 1);
+    dim3 dimGrid((int) ceil((double) n / BLOCK_SIZE), 1);
+    row_avg<<<dimGrid, dimBlock>>>(rowavg_GPU, out_mat1d_GPU, n, m);
+    cudaMemcpy(rowavg, rowavg_GPU, n*sizeof(float), cudaMemcpyDeviceToHost);
+    print_row_avg(rowavg, n, 0);
+  }
+  cudaEventRecord(stop);
+  set_duration(&(stats->row_avg), &start, &stop);
+  cuda_last_error_check("row_average_gpu");
 
   // Device->Host copy
-  cudaMemcpy(rowsum, rowsum_GPU, n*sizeof(float), cudaMemcpyDeviceToHost);
+  cudaEventRecord(start);
+  cudaMemcpy(out_mat1d, out_mat1d_GPU, n*m*sizeof(float), cudaMemcpyDeviceToHost);
+  cudaEventRecord(stop);
+  set_duration(&(stats->to_cpu_transfer), &start, &stop);
 
   cudaFree(mat1d_GPU);
-  cudaFree(rowsum_GPU);
-}
-
-void add_columns_gpu(float* colsum, float* mat1d, int n, int m, struct Timer* timer) {
-  // Compute execution GPU config
-  dim3 dimBlock(1, BLOCK_SIZE);
-  int blocks_in_grid = (int) ceil((double) n / BLOCK_SIZE);
-  dim3 dimGrid(blocks_in_grid, 1);
-
-  // Device: alloc
-  float* mat1d_GPU;
-  float* colsum_GPU;
-  cudaMalloc((void**) &mat1d_GPU, n*m*sizeof(float));
-  cudaMalloc((void**) &colsum_GPU, m*sizeof(float));
-
-  // Host->Device copy
-  cudaMemcpy(mat1d_GPU, mat1d, n*m*sizeof(float), cudaMemcpyHostToDevice);
-
-  // Device: execution + timing
-  start_timer(timer);
-  add_cols_gpu_kernel<<<dimGrid, dimBlock>>>(mat1d_GPU, colsum_GPU, n, m);
-  end_timer(timer);
-
-  cuda_last_error_check("add_columns_gpu");
-
-  // Device->Host copy
-  cudaMemcpy(colsum, colsum_GPU, m*sizeof(float), cudaMemcpyDeviceToHost);
-
-  cudaFree(mat1d_GPU);
-  cudaFree(colsum_GPU);
-}
-
-void reduce_vector_gpu(float* vec, float* result, int n, struct Timer* timer) {
-  // Compute execution GPU config
-  dim3 dimBlock(1, 1);
-  int blocks_in_grid = (int) ceil((double) n / BLOCK_SIZE);
-  dim3 dimGrid(blocks_in_grid, 1);
-
-  // Device: alloc
-  float* vec_GPU;
-  float* result_GPU;
-  cudaMalloc((void**) &vec_GPU, n*sizeof(float));
-  cudaMalloc((void**) &result_GPU, sizeof(float));
-
-  // Host->Device copy
-  cudaMemcpy(vec_GPU, vec, n*sizeof(float), cudaMemcpyHostToDevice);
-
-  // Device: execution + timing
-  start_timer(timer);
-  reduce_vector_gpu_kernel<<<dimGrid, dimBlock>>>(vec_GPU, result_GPU, n);
-  end_timer(timer);
-
-  cuda_last_error_check("reduce_vector_gpu");
-
-  // Device->Host copy
-  cudaMemcpy(vec, vec_GPU, n*sizeof(float), cudaMemcpyDeviceToHost);
-  cudaMemcpy(result, result_GPU, sizeof(float), cudaMemcpyDeviceToHost);
-
-  cudaFree(result_GPU);
+  cudaFree(out_mat1d_GPU);
 }
 
 
 // Kernels
+__global__ void evolve_gpu_kernel(float* mat, float* out, int n, int m) {
+  // __shared__ float mat_local[BLOCK_SIZE+4]; // Tile width = block size
+  int x = blockIdx.x * BLOCK_SIZE + threadIdx.x;
+  int y = blockIdx.y * BLOCK_SIZE + threadIdx.y;
 
-__global__ void add_rows_gpu_kernel(float* mat, float* out, int n, int m) {
+  // Load tile into shared and wait for threads
+  //__syncthreads();
+
+  // Left-most columns 0 and 1
+  if (x >= 0 && x < n && y >= 0 && y <= 1) {
+    out[x*m + y] = mat[x*m + y];
+  }
+
+  // Other columns
+  if (x >= 0 && x < n && y > 1 && y < m) {
+    out[x*m + y] = ((1.9*mat[x*m + y-2]) +
+		    (1.5*mat[x*m + y-1]) +
+		    mat[x*m + y] +
+		    (0.5*mat[x*m + (y+1)%m]) +
+		    (0.1*mat[x*m + (y+2)%m])) / (float) 5;
+  }
+}
+
+__global__ void copy_matrix(float* mat, float* out, int n, int m) {
        int x = blockIdx.x * BLOCK_SIZE + threadIdx.x;
-       int y = threadIdx.y;
-       if (x < n && y == 0) { // Only 0th thread in the y dimension is used
-	 out[x] = 0;
-	 for (int i = 0; i < m; i++) {
-	   out[x] += mat[i+(x*m)];
-	 }
+       int y = blockIdx.y * BLOCK_SIZE + threadIdx.y;
+       if (x >= 0 && x < n && y > 1 && y < m) {
+	 mat[x*m + y] = out[x*m + y];
        }
 }
 
-__global__ void add_cols_gpu_kernel(float* mat, float* out, int n, int m) {
-       int x = threadIdx.x;
-       int y = blockIdx.x * BLOCK_SIZE + threadIdx.y;
-       if (y < m && x == 0) { // Only 0th thread in the x dimension is used
-	 out[y] = 0;
-	 for (int i = 0; i < n; i++) {
-	   out[y] += mat[(i*m)+y];
-	 }
-       }
+__global__ void row_avg(float* rowavg, float* mat1d, int n, int m) {
+  int x = blockIdx.x * BLOCK_SIZE + threadIdx.x;
+  int y = threadIdx.y;
+
+  if (y == 0 && x < n && x >= 0) {
+    double sum = 0;
+    for (int i = 0; i < m; i++) {
+      sum += mat1d[x*m + i];
+    }
+    double avg = sum / (double) m;
+    rowavg[x] = (float) avg;
+  }
+
 }
 
-__global__ void reduce_vector_gpu_kernel(float* vec, float* result, int n) {
-       int x = threadIdx.x;
-       int y = threadIdx.y;
-       if (x == 0 && y == 0) { // Only 1 thread used
-	 *result = 0;
-	 for (int i = 0; i < n; i++) {
-	   *result += vec[i];
-	 }
-       }
-}
-
-// Cuda error check util
+// GPU specific util fns: for cuda error check and duration calc from cuda events
 void cuda_last_error_check (const char *message) {
 	cudaError_t err = cudaGetLastError();
 	if(cudaSuccess != err) {
 		printf("[CUDA] [ERROR] %s: %s\n", message, cudaGetErrorString(err));
 		exit(EXIT_FAILURE);
 	}
+}
+
+void set_duration(Timer* timer, cudaEvent_t* start, cudaEvent_t* stop) {
+  float milliseconds = 0;
+  cudaEventSynchronize(*stop);
+  cudaEventElapsedTime(&milliseconds, *start, *stop);
+  timer->duration_ms = milliseconds;
 }

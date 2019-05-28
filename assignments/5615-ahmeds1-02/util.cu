@@ -26,15 +26,25 @@ void print_vector(float* vector, int n, char* name) {
   printf("\n");
 }
 
-void print_compute_results(char* title, float* rowvec, float* colvec, float rowsum, float colsum, int n, int m) {
+void print_compute_results(char* title, float* rowvec, int n, int m) {
   printf("%s\n", title);
   if (options.print_vectors) { // Print result vectors if command-line flag enabled
     print_vector(rowvec, n, (char*) "Rowsum Vector");
-    print_vector(colvec, m, (char*) "Colsum Vector");
   }
 
-  printf("Rowsum sum: %f \n", rowsum);
-  printf("Colsum sum: %f \n", colsum);
+  printf("\n");
+}
+
+void print_row_avg(float* rowavg, int n, int iter) {
+  if (options.show_average == 0)
+    return;
+  if ((iter+1) % options.show_average != 0)
+    return;
+
+  printf("Row Average Temperatures:\n");
+  for (int i = 0; i < n; i++) {
+    printf("%f, ", rowavg[i]);
+  }
   printf("\n");
 }
 
@@ -44,36 +54,9 @@ double elapsed_time(clock_t start, clock_t end) {
   return time_spent_ms;
 }
 void print_elapsed_time(char* fn_name, clock_t start, clock_t end) {
-  printf("(timing) %s: %fms \n", fn_name, elapsed_time(start, end));
+  printf("%s: %fms \n", fn_name, elapsed_time(start, end));
 };
 
-// Initialize values of matrix randomized using
-// milliseconds since epoch as seed
-long int milliseconds_since_epoch_now() {
-  struct timespec spec;
-  clock_gettime(CLOCK_REALTIME, &spec);
-  long int ms = round(spec.tv_nsec / 1.0e6); // Convert nanoseconds to milliseconds
-  return ms;
-}
-
-void initialize_matrix_values(float** matrix, float* mat1d, int n, int m) {
-  for (int i = 0; i < n; i++) {
-    matrix[i] = &(mat1d[i*m]); // map row-beginnings in 1d to mat
-  }
-
-  long int seed = options.seed_milliseconds ? milliseconds_since_epoch_now() : 123456; // if -r flag
-  srand48(seed);
-
-  // Initialize floating point matrix
-  for (int i = 0; i < n; i++) {
-    for (int j = 0; j < m; j++) {
-      matrix[i][j] = (float) (drand48()*2.0) - 1.0;
-    }
-  }
-
-  if (options.print_vectors)
-    print_matrix(matrix, n, m);
-}
 
 // Record timing
 void start_timer(struct Timer* timer) {
