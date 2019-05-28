@@ -33,7 +33,7 @@ int main(int argc, char* argv[]) {
   printf("Initialized matrix values...\n");
   struct HostStats host_stats;
   perform_cpu_evolution(old_mat, new_mat, &host_stats);
-  //  print_matrix(new_mat, n, m);
+  //  print_matrix(new_mat, n, m); // Uncomment to print output matrix
 
   // GPU version
   printf("Performing GPU computations...\n");
@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
 
   struct DeviceStats device_stats;
   perform_gpu_evolution(out_mat1d, mat1d, &device_stats);
-  //  print_matrix(new_mat, n, m);
+  //  print_matrix(new_mat, n, m);  // Uncomment to print output matrix
 
   // Timings
   print_timing_report(host_stats, device_stats);

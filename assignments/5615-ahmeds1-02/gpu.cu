@@ -58,8 +58,8 @@ void evolve_gpu(float* out_mat1d, float* mat1d, int n, int m, int iters, struct 
   set_duration(&(stats->to_gpu_transfer), &start, &stop);
 
   // Device: execution + timing
-  dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
-  dim3 dimGrid(x_blocks_in_grid, y_blocks_in_grid);
+  dim3 dimBlock(BLOCK_SIZE*BLOCK_SIZE, 1);
+  dim3 dimGrid(x_blocks_in_grid, y_blocks_in_grid); // TODO: check n != m
 
   cudaEventRecord(start);
   for (int i = 0; i < iters; i++) {
